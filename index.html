@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Браслеты Handmade</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; max-width: 600px; margin: auto; }
+        .card { border: 1px solid #ccc; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
+        button { padding: 10px 20px; background: #4CAF50; color: white; border: none; border-radius: 5px; cursor: pointer; }
+        button:disabled { background: #ccc; }
+        #status { margin-top: 15px; font-weight: bold; font-family: monospace; white-space: pre-wrap; color: #d32f2f; background: #ffebee; padding: 10px; border-radius: 4px; display: none; }
+    </style>
+</head>
+<body>
+
+    <h1>Handmade Браслеты</h1>
+
+    <div class="card">
+        <h2>Браслет из бисера "Космос"</h2>
+        <p>Цена: 1000 ₽</p>
+        <button id="buyBtn">Купить (Заморозить средства)</button>
+        
+        <div id="adminPanel" style="display:none; margin-top: 20px; border-top: 1px dashed #ccc; padding-top: 20px;">
+            <p>Статус: <span id="paymentStatus">Ожидает...</span></p>
+            <button id="confirmBtn" style="display:none; background: #2196F3;">Товар пришел (Списать деньги)</button>
+            <button id="cancelBtn" style="display:none; background: #f44336;">Отменить (Вернуть деньги)</button>
+        </div>
+        
+        <!-- Блок для вывода ошибки -->
+        <div id="status"></div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getFirestore, doc, setDoc, updateDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyBrNBXPuXPcv-T7_yje3PDPtCYJxyQIqiE",
+            authDomain: "tgnew-4d8f1.firebaseapp.com",
+            projectId: "tgnew-4d8f1",
+            storageBucket: "tgnew-4d8f1.firebasestorage.app",
+            messagingSenderId: "878588958572",
+            appId: "1:878588958572:web:62ac2fcfaaeb984643c549",
+            measurementId: "G-D4QTT2VYYE"
+        };
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        // ⚠️ УБЕДИТЕСЬ, ЧТО ЗДЕСЬ ВАШ URL
+        const CLOUDFLARE_WORKER_URL = "https://yookassa-backend.anvistanb17.workers.dev"; 
+        
+        let currentPaymentId = null;
+        const buyBtn = document.getElementById('buyBtn');
+        const statusDiv = document.getElementById('status');
+
+        buyBtn.addEventListener('click', async () => {
+            buyBtn.disabled = true;
+            statusDiv.style.display = "block";
+            statusDiv.innerText = "Отправка запроса к Cloudflare... Пожалуйста, подождите.";
+
+            try {
+                console.log("Отправляем запрос на:", CLOUDFLARE_WORKER_URL);
+                
+                const response = await fetch(CLOUDFLARE_WORKER_URL, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        action: "create_payment",
+                        amount: "1000.00",
+                        description: "Покупка браслета Космос",
+                        return_url: window.location.href
+                    })
+                });
+
+                console.log("Ответ получен. Статус:", response.status);
+                
+                // Читаем ответ как текст, чтобы увидеть даже HTML-ошибки
+                const textData = await response.text();
+                console.log("Тело ответа:", textData);
+
+                let data;
+                try {
+                    data = JSON.parse(textData);
+                } catch (e) {
+                    throw new Error("Сервер вернул не JSON, а HTML/текст. Скорее всего, ошибка в коде Worker'а. Ответ: " + textData.substring(0, 100));
+                }
+
+                if (data.confirmation && data.confirmation.confirmation_url) {
+                    currentPaymentId = data.id;
+                    await setDoc(doc(db, "payments", currentPaymentId), {
+                        amount: 1000,
+                        status: data.status,
+                        created_at: new Date().toISOString()
+                    });
+                    statusDiv.innerText = "Успех! Перенаправляем на ЮKassa...";
+                    window.location.href = data.confirmation.confirmation_url;
+                } else {
+                    statusDiv.innerText = "Ошибка от ЮKassa или Worker'а:\n" + JSON.stringify(data, null, 2);
+                    buyBtn.disabled = false;
+                }
+            } catch (error) {
+                console.error("ПОЙМАНА ОШИБКА:", error);
+                // Выводим точную ошибку на экран
+                statusDiv.innerText = "Точная ошибка соединения:\n" + error.message + "\n\nПроверьте консоль (F12) для подробностей.";
+                buyBtn.disabled = false;
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,4 @@
+# onreza.rules.toml
+[[pipeline]]
+path = "/api/yookassa" # Твой URL будет https://твой-проект.onreza.app/api/yookassa
+handle = "yookassa.nrz-fn" # Имя твоего файла функции без расширения
