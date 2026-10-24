@@ -27,13 +27,12 @@
             <button id="cancelBtn" style="display:none; background: #f44336;">Отменить (Вернуть деньги)</button>
         </div>
         
-        <!-- Блок для вывода ошибки -->
         <div id="status"></div>
     </div>
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getFirestore, doc, setDoc, updateDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { getFirestore, doc, setDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyBrNBXPuXPcv-T7_yje3PDPtCYJxyQIqiE",
@@ -47,8 +46,7 @@
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
 
-        // ⚠️ УБЕДИТЕСЬ, ЧТО ЗДЕСЬ ВАШ URL
-        const CLOUDFLARE_WORKER_URL = "https://yookassa-backend.anvistanb17.workers.dev"; 
+        const PAYMENT_API_URL = "/api/payment"; 
         
         let currentPaymentId = null;
         const buyBtn = document.getElementById('buyBtn');
@@ -57,12 +55,10 @@
         buyBtn.addEventListener('click', async () => {
             buyBtn.disabled = true;
             statusDiv.style.display = "block";
-            statusDiv.innerText = "Отправка запроса к Cloudflare... Пожалуйста, подождите.";
+            statusDiv.innerText = "Отправка запроса... Пожалуйста, подождите.";
 
             try {
-                console.log("Отправляем запрос на:", CLOUDFLARE_WORKER_URL);
-                
-                const response = await fetch(CLOUDFLARE_WORKER_URL, {
+                const response = await fetch(PAYMENT_API_URL, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
@@ -72,18 +68,14 @@
                         return_url: window.location.href
                     })
                 });
-
-                console.log("Ответ получен. Статус:", response.status);
                 
-                // Читаем ответ как текст, чтобы увидеть даже HTML-ошибки
                 const textData = await response.text();
-                console.log("Тело ответа:", textData);
 
                 let data;
                 try {
                     data = JSON.parse(textData);
                 } catch (e) {
-                    throw new Error("Сервер вернул не JSON, а HTML/текст. Скорее всего, ошибка в коде Worker'а. Ответ: " + textData.substring(0, 100));
+                    throw new Error("Сервер вернул ошибку: " + textData.substring(0, 100));
                 }
 
                 if (data.confirmation && data.confirmation.confirmation_url) {
@@ -96,13 +88,12 @@
                     statusDiv.innerText = "Успех! Перенаправляем на ЮKassa...";
                     window.location.href = data.confirmation.confirmation_url;
                 } else {
-                    statusDiv.innerText = "Ошибка от ЮKassa или Worker'а:\n" + JSON.stringify(data, null, 2);
+                    statusDiv.innerText = "Ошибка от ЮKassa:\n" + JSON.stringify(data, null, 2);
                     buyBtn.disabled = false;
                 }
             } catch (error) {
                 console.error("ПОЙМАНА ОШИБКА:", error);
-                // Выводим точную ошибку на экран
-                statusDiv.innerText = "Точная ошибка соединения:\n" + error.message + "\n\nПроверьте консоль (F12) для подробностей.";
+                statusDiv.innerText = "Ошибка соединения:\n" + error.message;
                 buyBtn.disabled = false;
             }
         });
